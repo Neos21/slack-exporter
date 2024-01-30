@@ -106,27 +106,50 @@ class Client:
 def main(
     token: str,
     output_dir: Path,
-    output_format: Literal["json", "jsonl"] = "jsonl",
 ) -> None:
     """Slack のメッセージをエクスポートする
 
     Args:
         token (str): Slack の OAuth トークン
         output_dir (Path): エクスポートしたデータの保存先ディレクトリ
-        output_format (Literal["json", "jsonl"], optional): 保存するときのファイル形式
     """
     output_dir.mkdir(exist_ok=False)
 
     client = Client(token)
 
     logger.info("Fetching users")
-    users = {user["id"]: user for user in client.fetch_users()}
+    raw_users = client.fetch_users()
+    users = {user["id"]: user for user in raw_users}
     logger.info(f"{len(users)} users fetched")
-
+    # =====
+    users_output_path = f"{output_dir}/users.json"
+    with open(users_output_path, "w") as f:
+        json.dump(
+            raw_users,
+            f,
+            indent=2,
+            ensure_ascii=False,
+            sort_keys=True,
+        )
+    logger.info(f"{len(users)} users written")
+    # =====
+    
     logger.info("Fetching channels")
     channels = client.fetch_channels()
     logger.info(f"{len(channels)} channels fetched")
-
+    # =====
+    channels_output_path = f"{output_dir}/channels.json"
+    with open(channels_output_path, "w") as f:
+        json.dump(
+            channels,
+            f,
+            indent=2,
+            ensure_ascii=False,
+            sort_keys=True,
+        )
+    logger.info(f"{len(channels)} channels written")
+    # =====
+    
     for channel in channels:
         channel_id = channel["id"]
         channel_name = channel.get("name") or users[channel.get("user")]["name"]
@@ -146,29 +169,23 @@ def main(
 
         logger.info(f"{len(messages_and_replies)} messages/replies fetched")
 
-        output_path = f"{output_dir / channel_name}.{output_format}"
+        output_path = f"{output_dir / channel_name}.json"
         with open(output_path, "w") as f:
-            if output_format == "json":
-                json.dump(
-                    messages_and_replies,
-                    f,
-                    indent=4,
-                    ensure_ascii=False,
-                    sort_keys=True,
-                )
-            elif output_format == "jsonl":
-                for message in messages_and_replies:
-                    json.dump(message, f, ensure_ascii=False, sort_keys=True)
-                    f.write("\n")
+            json.dump(
+                messages_and_replies,
+                f,
+                indent=2,
+                ensure_ascii=False,
+                sort_keys=True,
+            )
 
 
 if __name__ == "__main__":
     from argparse import ArgumentParser
-
+    
     parser = ArgumentParser(description="Export Slack history")
     parser.add_argument("--token", required=True, help="OAuth Access Token")
     parser.add_argument("--output-dir", default="output", help="Output Directory")
-    parser.add_argument("--output-format", default="json", help="Output Format (json or jsonl)")
     args = parser.parse_args()
-
-    main(args.token, Path(args.output_dir), args.output_format)
+    
+    main(args.token, Path(args.output_dir))
